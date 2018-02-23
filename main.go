@@ -1,6 +1,6 @@
 package main
 
-import "gitlab.com/pmavro/msa-k8s-deployer/cmd"
+import "github.com/MySocialApp/msa-deployer/cmd"
 
 func main() {
 	cmd.Execute()
