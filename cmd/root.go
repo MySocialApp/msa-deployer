@@ -14,9 +14,17 @@ var clientFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:	"msa-k8s-deployer",
+	Use:	"deployer",
 	Short:	"MySocialApp deployer for application and databases",
 	Long:	`This application is used manage client's infrastructure`,
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version number of msa-deployer",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("v0.2")
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -31,6 +39,7 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
+	rootCmd.AddCommand(versionCmd)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./.deployer.yaml)")
 	rootCmd.PersistentFlags().StringVar(&clientFile, "clientfile", "", "config file (default is ./clients.csv)")
 
