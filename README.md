@@ -1,4 +1,4 @@
-# MSA Deployer
+# MSA Deployer [![Build Status](https://travis-ci.org/MySocialApp/msa-deployer.svg?branch=master)](https://travis-ci.org/MySocialApp/msa-deployer)
 
 This tool is the one we're using at [MySocialApp](https://mysocialapp.io) (iOS and Android social app builder - SaaS) to simplify deployment.
 It launch gitlab pipelines jobs and give a wizzard for some specific actions.
