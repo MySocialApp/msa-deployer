@@ -75,7 +75,7 @@ func gitlabBuildPipeline(git *gitlab.Client, clientId string) int {
 	opt := &gitlab.RunPipelineTriggerOptions{
 		Token:		gitlab.String(viper.GetString("gitlab_pipeline_token")),
 		Variables:	customForms,
-		Ref: 		gitlab.String("deployer"), // todo: remove when going to prod
+		Ref: 		gitlab.String("master"), // todo: remove when going to prod
 	}
 
 	// Build pipeline
