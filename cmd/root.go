@@ -5,7 +5,6 @@ import (
 	"os"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"path/filepath"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -54,27 +53,18 @@ func initConfig() {
 		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Find current directory.
-		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		// Search config in current directory with name ".msa-k8s-deployer" (without extension).
-		viper.AddConfigPath(dir)
-		viper.SetConfigName(".deployer.yaml")
+		// Search config in current directory
+		viper.AddConfigPath(".")
+		viper.SetConfigName(".deployer")
 	}
-
 	viper.AutomaticEnv() // read in environment variables that match
 
 	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		log.Debug("Using config file: ", viper.ConfigFileUsed())
-	} else {
-		log.Fatal("Config file not found")
-		os.Exit(1)
+	if err := viper.ReadInConfig() ; err != nil {
+		log.Error("Config file not found:")
+		log.Fatal(err)
 	}
+	log.Debug("Using config file: ", viper.ConfigFileUsed())
 
 	configValidator("gitlab_project_id")
 	configValidator("gitlab_token")
