@@ -26,7 +26,7 @@ var deployCmd = &cobra.Command{
 		log.Info("Deploying " + args[0] + " requested")
 
 		// Check client exit and establish connection
-		//checkClientExist(args[0])
+		checkClientExist(args[0])
 		git := gitlabConnection()
 		// Make pipeline + get jobs + run desired job
 		pipelineId := gitlabBuildPipeline(git, args[0])
@@ -41,21 +41,22 @@ func init() {
 	// Here you will define your flags and configuration settings.
 }
 
-func checkClientExist(clientId string) bool{
+func checkClientExist(clientId string) {
+	clientFilename := "clients.csv"
+
 	log.Info("Check " + clientId + " client exists")
 
 	// read the whole file at once
-	b, err := ioutil.ReadFile("clients.csv")
+	b, err := ioutil.ReadFile(clientFilename)
 	if err != nil {
 		panic(err)
 	}
 	s := string(b)
 
 	//check whether s contains substring text
-	if strings.Contains(s, clientId) {
-		return true
+	if ! strings.Contains(s, clientId) {
+		log.Fatal("This client has not been found in " + clientFilename)
 	}
-	return false
 }
 
 // gitlabConnection establish a gitlab connection
