@@ -61,8 +61,8 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig() ; err != nil {
-		log.Error("Config file not found:")
-		log.Fatal(err)
+		log.Debug(err)
+		log.Fatal("Config file not found (.deployer.yaml)")
 	}
 	log.Debug("Using config file: ", viper.ConfigFileUsed())
 
