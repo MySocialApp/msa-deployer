@@ -7,7 +7,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/xanzy/go-gitlab"
 	"github.com/spf13/viper"
-	"os"
 	"strconv"
 )
 
@@ -87,7 +86,6 @@ func gitlabBuildPipeline(git *gitlab.Client, clientId string) int {
 	if err != nil {
 		log.Error("Wasn't able to create the gitlab pipeline:")
 		log.Fatal(err)
-		os.Exit(1)
 	}
 
 	return project.ID
@@ -102,7 +100,6 @@ func gitlabGetJob(git *gitlab.Client, pipelineId int) []gitlab.Job {
 	if err != nil {
 		log.Error("Wasn't able to list jobs from gitlab pipeline:")
 		log.Fatal(err)
-		os.Exit(1)
 	}
 	return jobs
 }
@@ -128,7 +125,6 @@ func gitlabRunJob(git *gitlab.Client, pipelineId int, jobs []gitlab.Job, jobName
 	if err != nil {
 		log.Error("Wasn't able to play job " + jobName + " id " + strconv.Itoa(jobId) + " on pipeline " + strconv.Itoa(pipelineId))
 		log.Fatal(err)
-		os.Exit(1)
 	}
 	log.Info("Job successfully been launched")
 	log.Info("Job progression: https://gitlab.com/" + viper.GetString("gitlab_project_name") + "/-/jobs/" + strconv.Itoa(jobId))

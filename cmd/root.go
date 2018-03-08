@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	log "github.com/sirupsen/logrus"
@@ -30,8 +29,7 @@ var versionCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }
 
@@ -73,8 +71,7 @@ func initConfig() {
 
 func configValidator(key string) bool {
 	if len(viper.GetString("gitlab_project_id")) == 0 {
-		log.Error("Can't access mandatory information in your config file, please set '" + key + "' in " + viper.ConfigFileUsed())
-		os.Exit(1)
+		log.Fatal("Can't access mandatory information in your config file, please set '" + key + "' in " + viper.ConfigFileUsed())
 	}
 	return true
 }
