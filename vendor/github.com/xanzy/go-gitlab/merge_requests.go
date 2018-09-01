@@ -68,16 +68,32 @@ type MergeRequest struct {
 	Milestone                 *Milestone `json:"milestone"`
 	MergeWhenPipelineSucceeds bool       `json:"merge_when_pipeline_succeeds"`
 	MergeStatus               string     `json:"merge_status"`
-	Subscribed                bool       `json:"subscribed"`
-	SHA                       string     `json:"sha"`
-	MergeCommitSHA            string     `json:"merge_commit_sha"`
-	UserNotesCount            int        `json:"user_notes_count"`
-	ChangesCount              string     `json:"changes_count"`
-	ShouldRemoveSourceBranch  bool       `json:"should_remove_source_branch"`
-	ForceRemoveSourceBranch   bool       `json:"force_remove_source_branch"`
-	WebURL                    string     `json:"web_url"`
-	DiscussionLocked          bool       `json:"discussion_locked"`
-	Changes                   []struct {
+	MergedBy                  struct {
+		ID        int        `json:"id"`
+		Username  string     `json:"username"`
+		Name      string     `json:"name"`
+		State     string     `json:"state"`
+		CreatedAt *time.Time `json:"created_at"`
+	} `json:"merged_by"`
+	MergedAt *time.Time `json:"merged_at"`
+	ClosedBy struct {
+		ID        int        `json:"id"`
+		Username  string     `json:"username"`
+		Name      string     `json:"name"`
+		State     string     `json:"state"`
+		CreatedAt *time.Time `json:"created_at"`
+	} `json:"closed_by"`
+	ClosedAt                 *time.Time `json:"closed_at"`
+	Subscribed               bool       `json:"subscribed"`
+	SHA                      string     `json:"sha"`
+	MergeCommitSHA           string     `json:"merge_commit_sha"`
+	UserNotesCount           int        `json:"user_notes_count"`
+	ChangesCount             string     `json:"changes_count"`
+	ShouldRemoveSourceBranch bool       `json:"should_remove_source_branch"`
+	ForceRemoveSourceBranch  bool       `json:"force_remove_source_branch"`
+	WebURL                   string     `json:"web_url"`
+	DiscussionLocked         bool       `json:"discussion_locked"`
+	Changes                  []struct {
 		OldPath     string `json:"old_path"`
 		NewPath     string `json:"new_path"`
 		AMode       string `json:"a_mode"`
@@ -88,40 +104,16 @@ type MergeRequest struct {
 		DeletedFile bool   `json:"deleted_file"`
 	} `json:"changes"`
 	TimeStats *TimeStats `json:"time_stats"`
+	Squash    bool       `json:"squash"`
+	Pipeline  struct {
+		ID     int    `json:"id"`
+		Ref    string `json:"ref"`
+		SHA    string `json:"sha"`
+		Status string `json:"status"`
+	} `json:"pipeline"`
 }
 
 func (m MergeRequest) String() string {
-	return Stringify(m)
-}
-
-// MergeRequestApprovals represents GitLab merge request approvals.
-//
-// GitLab API docs:
-// https://docs.gitlab.com/ee/api/merge_requests.html#merge-request-approvals
-type MergeRequestApprovals struct {
-	ID                int        `json:"id"`
-	ProjectID         int        `json:"project_id"`
-	Title             string     `json:"title"`
-	Description       string     `json:"description"`
-	State             string     `json:"state"`
-	CreatedAt         *time.Time `json:"created_at"`
-	UpdatedAt         *time.Time `json:"updated_at"`
-	MergeStatus       string     `json:"merge_status"`
-	ApprovalsRequired int        `json:"approvals_required"`
-	ApprovalsMissing  int        `json:"approvals_missing"`
-	ApprovedBy        []struct {
-		User struct {
-			Name      string `json:"name"`
-			Username  string `json:"username"`
-			ID        int    `json:"id"`
-			State     string `json:"state"`
-			AvatarURL string `json:"avatar_url"`
-			WebURL    string `json:"web_url"`
-		} `json:"user"`
-	} `json:"approved_by"`
-}
-
-func (m MergeRequestApprovals) String() string {
 	return Stringify(m)
 }
 
@@ -267,7 +259,7 @@ func (s *MergeRequestsService) GetMergeRequest(pid interface{}, mergeRequest int
 // GetMergeRequestApprovals gets information about a merge requests approvals
 //
 // GitLab API docs:
-// https://docs.gitlab.com/ee/api/merge_requests.html#merge-request-approvals
+// https://docs.gitlab.com/ee/api/merge_request_approvals.html#merge-request-level-mr-approvals
 func (s *MergeRequestsService) GetMergeRequestApprovals(pid interface{}, mergeRequest int, options ...OptionFunc) (*MergeRequestApprovals, *Response, error) {
 	project, err := parseID(pid)
 	if err != nil {
@@ -347,6 +339,31 @@ func (s *MergeRequestsService) GetMergeRequestChanges(pid interface{}, mergeRequ
 	return m, resp, err
 }
 
+// ListMergeRequestPipelines gets all pipelines for the provided merge request.
+//
+// GitLab API docs:
+// https://docs.gitlab.com/ce/api/merge_requests.html#list-mr-pipelines
+func (s *MergeRequestsService) ListMergeRequestPipelines(pid interface{}, mergeRequest int, options ...OptionFunc) (PipelineList, *Response, error) {
+	project, err := parseID(pid)
+	if err != nil {
+		return nil, nil, err
+	}
+	u := fmt.Sprintf("projects/%s/merge_requests/%d/pipelines", url.QueryEscape(project), mergeRequest)
+
+	req, err := s.client.NewRequest("GET", u, nil, options)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var p PipelineList
+	resp, err := s.client.Do(req, &p)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return p, resp, err
+}
+
 // GetIssuesClosedOnMergeOptions represents the available GetIssuesClosedOnMerge()
 // options.
 //
@@ -364,7 +381,7 @@ func (s *MergeRequestsService) GetIssuesClosedOnMerge(pid interface{}, mergeRequ
 	if err != nil {
 		return nil, nil, err
 	}
-	u := fmt.Sprintf("/projects/%s/merge_requests/%v/closes_issues", url.QueryEscape(project), mergeRequest)
+	u := fmt.Sprintf("/projects/%s/merge_requests/%d/closes_issues", url.QueryEscape(project), mergeRequest)
 
 	req, err := s.client.NewRequest("GET", u, opt, options)
 	if err != nil {
@@ -386,12 +403,17 @@ func (s *MergeRequestsService) GetIssuesClosedOnMerge(pid interface{}, mergeRequ
 // GitLab API docs:
 // https://docs.gitlab.com/ce/api/merge_requests.html#create-mr
 type CreateMergeRequestOptions struct {
-	Title           *string `url:"title,omitempty" json:"title,omitempty"`
-	Description     *string `url:"description,omitempty" json:"description,omitempty"`
-	SourceBranch    *string `url:"source_branch,omitempty" json:"source_branch,omitempty"`
-	TargetBranch    *string `url:"target_branch,omitempty" json:"target_branch,omitempty"`
-	AssigneeID      *int    `url:"assignee_id,omitempty" json:"assignee_id,omitempty"`
-	TargetProjectID *int    `url:"target_project_id,omitempty" json:"target_project_id,omitempty"`
+	Title              *string `url:"title,omitempty" json:"title,omitempty"`
+	Description        *string `url:"description,omitempty" json:"description,omitempty"`
+	SourceBranch       *string `url:"source_branch,omitempty" json:"source_branch,omitempty"`
+	TargetBranch       *string `url:"target_branch,omitempty" json:"target_branch,omitempty"`
+	Labels             Labels  `url:"labels,comma,omitempty" json:"labels,omitempty"`
+	AssigneeID         *int    `url:"assignee_id,omitempty" json:"assignee_id,omitempty"`
+	TargetProjectID    *int    `url:"target_project_id,omitempty" json:"target_project_id,omitempty"`
+	MilestoneID        *int    `url:"milestone_id,omitempty" json:"milestone_id,omitempty"`
+	RemoveSourceBranch *bool   `url:"remove_source_branch,omitempty" json:"remove_source_branch,omitempty"`
+	Squash             *bool   `url:"squash,omitempty" json:"squash,omitempty"`
+	AllowCollaboration *bool   `url:"allow_collaboration,omitempty" json:"allow_collaboration,omitempty"`
 }
 
 // CreateMergeRequest creates a new merge request.

@@ -37,14 +37,12 @@ var deployCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(deployCmd)
-
-	// Here you will define your flags and configuration settings.
 }
 
 func checkClientExist(clientId string) {
 	clientFilename := "clients.csv"
 
-	log.Info("Check " + clientId + " client exists")
+	log.Infof("Check %s client exists", clientId)
 
 	// read the whole file at once
 	b, err := ioutil.ReadFile(clientFilename)
@@ -55,7 +53,7 @@ func checkClientExist(clientId string) {
 
 	//check whether s contains substring text
 	if ! strings.Contains(s, clientId) {
-		log.Fatal("This client has not been found in " + clientFilename)
+		log.Fatalf("This client has not been found in %s", clientFilename)
 	}
 }
 
@@ -84,8 +82,7 @@ func gitlabBuildPipeline(git *gitlab.Client, clientId string) int {
 		viper.GetInt("gitlab_project_id"),
 		opt)
 	if err != nil {
-		log.Error("Wasn't able to create the gitlab pipeline:")
-		log.Fatal(err)
+		log.Fatalf("Wasn't able to create the gitlab pipeline: %s", err)
 	}
 
 	return project.ID
@@ -93,20 +90,19 @@ func gitlabBuildPipeline(git *gitlab.Client, clientId string) int {
 
 // gitlabGetJobId get jobs from a pipeline ID
 // Example: job_id=$(curl --header "PRIVATE-TOKEN: ${gitlab_token}" "https://gitlab.com/api/v4/projects/${gitlab_project_id}/pipelines/${pipeline_id}/jobs" | jq --raw-input ".[] | select(.name == 'add-client') | .id")
-func gitlabGetJob(git *gitlab.Client, pipelineId int) []gitlab.Job {
+func gitlabGetJob(git *gitlab.Client, pipelineId int) []*gitlab.Job {
 	jobs, _, err := git.Jobs.ListPipelineJobs(
 		viper.GetInt("gitlab_project_id"),
 		pipelineId, &gitlab.ListJobsOptions{})
 	if err != nil {
-		log.Error("Wasn't able to list jobs from gitlab pipeline:")
-		log.Fatal(err)
+		log.Fatalf("Wasn't able to list jobs from gitlab pipeline: %s", err)
 	}
 	return jobs
 }
 
 // gitlabRunJob plays a job from a job name
 // Example: curl -X POST --header "PRIVATE-TOKEN: ${gitlab_token}" -F ref=deployer "https://gitlab.com/api/v4/projects/${gitlab_project_id}/jobs/${job_id}/play"
-func gitlabRunJob(git *gitlab.Client, pipelineId int, jobs []gitlab.Job, jobName string) {
+func gitlabRunJob(git *gitlab.Client, pipelineId int, jobs []*gitlab.Job, jobName string) {
 	var jobId int
 
 	// Get pipeline ID and job ID
@@ -123,9 +119,8 @@ func gitlabRunJob(git *gitlab.Client, pipelineId int, jobs []gitlab.Job, jobName
 		nil,
 	)
 	if err != nil {
-		log.Error("Wasn't able to play job " + jobName + " id " + strconv.Itoa(jobId) + " on pipeline " + strconv.Itoa(pipelineId))
-		log.Fatal(err)
+		log.Fatalf("Wasn't able to play job %s id %s on pipeline %s: %s", jobName, strconv.Itoa(jobId), strconv.Itoa(pipelineId), err)
 	}
 	log.Info("Job successfully been launched")
-	log.Info("Job progression: https://gitlab.com/" + viper.GetString("gitlab_project_name") + "/-/jobs/" + strconv.Itoa(jobId))
+	log.Infof("Job progression: https://gitlab.com/%s/-/jobs/%s", viper.GetString("gitlab_project_name"), strconv.Itoa(jobId))
 }

@@ -32,25 +32,27 @@ import (
 	"time"
 
 	"github.com/google/go-querystring/query"
+	"golang.org/x/oauth2"
 )
 
 const (
-	libraryVersion = "0.2.0"
-	defaultBaseURL = "https://gitlab.com/api/v4/"
-	userAgent      = "go-gitlab/" + libraryVersion
+	defaultBaseURL = "https://gitlab.com/"
+	apiVersionPath = "api/v4/"
+	userAgent      = "go-gitlab"
 )
 
-// tokenType represents a token type within GitLab.
+// authType represents an authentication type within GitLab.
 //
 // GitLab API docs: https://docs.gitlab.com/ce/api/
-type tokenType int
+type authType int
 
-// List of available token type
+// List of available authentication types.
 //
 // GitLab API docs: https://docs.gitlab.com/ce/api/
 const (
-	privateToken tokenType = iota
+	basicAuth authType = iota
 	oAuthToken
+	privateToken
 )
 
 // AccessLevelValue represents a permission level within GitLab.
@@ -117,6 +119,11 @@ func (t *ISOTime) UnmarshalJSON(data []byte) error {
 	return err
 }
 
+// String implements the Stringer interface
+func (t ISOTime) String() string {
+	return time.Time(t).Format(iso8601)
+}
+
 // NotificationLevelValue represents a notification level.
 type NotificationLevelValue int
 
@@ -179,19 +186,6 @@ var notificationLevelTypes = map[string]NotificationLevelValue{
 	"custom":        CustomNotificationLevel,
 }
 
-// OrderByValue represent in which order to sort the item
-type OrderByValue string
-
-// These constants represent all valid order by values.
-const (
-	OrderByCreatedAt OrderByValue = "created_at"
-	OrderByID        OrderByValue = "id"
-	OrderByIID       OrderByValue = "iid"
-	OrderByRef       OrderByValue = "ref"
-	OrderByStatus    OrderByValue = "status"
-	OrderByUserID    OrderByValue = "user_id"
-)
-
 // VisibilityValue represents a visibility level within GitLab.
 //
 // GitLab API docs: https://docs.gitlab.com/ce/api/
@@ -204,6 +198,20 @@ const (
 	PrivateVisibility  VisibilityValue = "private"
 	InternalVisibility VisibilityValue = "internal"
 	PublicVisibility   VisibilityValue = "public"
+)
+
+// MergeMethodValue represents a project merge type within GitLab.
+//
+// GitLab API docs: https://docs.gitlab.com/ce/api/projects.html#project-merge-method
+type MergeMethodValue string
+
+// List of available merge type
+//
+// GitLab API docs: https://docs.gitlab.com/ce/api/projects.html#project-merge-method
+const (
+	NoFastForwardMerge MergeMethodValue = "merge"
+	FastForwardMerge   MergeMethodValue = "ff"
+	RebaseMerge        MergeMethodValue = "rebase_merge"
 )
 
 // EventTypeValue represents actions type for contribution events
@@ -252,60 +260,72 @@ type Client struct {
 	// should always be specified with a trailing slash.
 	baseURL *url.URL
 
-	// token type used to make authenticated API calls.
-	tokenType tokenType
+	// Token type used to make authenticated API calls.
+	authType authType
 
-	// token used to make authenticated API calls.
+	// Username and password used for basix authentication.
+	username, password string
+
+	// Token used to make authenticated API calls.
 	token string
 
 	// User agent used when communicating with the GitLab API.
 	UserAgent string
 
 	// Services used for talking to different parts of the GitLab API.
-	AwardEmoji           *AwardEmojiService
-	Branches             *BranchesService
-	BuildVariables       *BuildVariablesService
-	BroadcastMessage     *BroadcastMessagesService
-	Commits              *CommitsService
-	DeployKeys           *DeployKeysService
-	Deployments          *DeploymentsService
-	Environments         *EnvironmentsService
-	Events               *EventsService
-	Features             *FeaturesService
-	Groups               *GroupsService
-	GroupMembers         *GroupMembersService
-	Issues               *IssuesService
-	IssueLinks           *IssueLinksService
-	Jobs                 *JobsService
-	Boards               *IssueBoardsService
-	Labels               *LabelsService
-	MergeRequests        *MergeRequestsService
-	Milestones           *MilestonesService
-	Namespaces           *NamespacesService
-	Notes                *NotesService
-	NotificationSettings *NotificationSettingsService
-	PagesDomains         *PagesDomainsService
-	Pipelines            *PipelinesService
-	PipelineTriggers     *PipelineTriggersService
-	Projects             *ProjectsService
-	ProjectMembers       *ProjectMembersService
-	ProjectSnippets      *ProjectSnippetsService
-	ProtectedBranches    *ProtectedBranchesService
-	Repositories         *RepositoriesService
-	RepositoryFiles      *RepositoryFilesService
-	Runners              *RunnersService
-	Services             *ServicesService
-	Session              *SessionService
-	Settings             *SettingsService
-	Sidekiq              *SidekiqService
-	Snippets             *SnippetsService
-	SystemHooks          *SystemHooksService
-	Tags                 *TagsService
-	Todos                *TodosService
-	Users                *UsersService
-	Validate             *ValidateService
-	Version              *VersionService
-	Wikis                *WikisService
+	AwardEmoji            *AwardEmojiService
+	Branches              *BranchesService
+	BuildVariables        *BuildVariablesService
+	BroadcastMessage      *BroadcastMessagesService
+	Commits               *CommitsService
+	DeployKeys            *DeployKeysService
+	Deployments           *DeploymentsService
+	Environments          *EnvironmentsService
+	Events                *EventsService
+	Features              *FeaturesService
+	GitIgnoreTemplates    *GitIgnoreTemplatesService
+	Groups                *GroupsService
+	GroupIssueBoards      *GroupIssueBoardsService
+	GroupMembers          *GroupMembersService
+	GroupMilestones       *GroupMilestonesService
+	GroupVariables        *GroupVariablesService
+	Issues                *IssuesService
+	IssueLinks            *IssueLinksService
+	Jobs                  *JobsService
+	Keys                  *KeysService
+	Boards                *IssueBoardsService
+	Labels                *LabelsService
+	MergeRequests         *MergeRequestsService
+	MergeRequestApprovals *MergeRequestApprovalsService
+	Milestones            *MilestonesService
+	Namespaces            *NamespacesService
+	Notes                 *NotesService
+	NotificationSettings  *NotificationSettingsService
+	PagesDomains          *PagesDomainsService
+	Pipelines             *PipelinesService
+	PipelineSchedules     *PipelineSchedulesService
+	PipelineTriggers      *PipelineTriggersService
+	Projects              *ProjectsService
+	ProjectMembers        *ProjectMembersService
+	ProjectSnippets       *ProjectSnippetsService
+	ProjectVariables      *ProjectVariablesService
+	ProtectedBranches     *ProtectedBranchesService
+	Repositories          *RepositoriesService
+	RepositoryFiles       *RepositoryFilesService
+	Runners               *RunnersService
+	Search                *SearchService
+	Services              *ServicesService
+	Session               *SessionService
+	Settings              *SettingsService
+	Sidekiq               *SidekiqService
+	Snippets              *SnippetsService
+	SystemHooks           *SystemHooksService
+	Tags                  *TagsService
+	Todos                 *TodosService
+	Users                 *UsersService
+	Validate              *ValidateService
+	Version               *VersionService
+	Wikis                 *WikisService
 }
 
 // ListOptions specifies the optional parameters to various List methods that
@@ -320,24 +340,64 @@ type ListOptions struct {
 
 // NewClient returns a new GitLab API client. If a nil httpClient is
 // provided, http.DefaultClient will be used. To use API methods which require
-// authentication, provide a valid private token.
+// authentication, provide a valid private or personal token.
 func NewClient(httpClient *http.Client, token string) *Client {
-	return newClient(httpClient, privateToken, token)
+	client := newClient(httpClient)
+	client.authType = privateToken
+	client.token = token
+	return client
+}
+
+// NewBasicAuthClient returns a new GitLab API client. If a nil httpClient is
+// provided, http.DefaultClient will be used. To use API methods which require
+// authentication, provide a valid username and password.
+func NewBasicAuthClient(httpClient *http.Client, endpoint, username, password string) (*Client, error) {
+	client := newClient(httpClient)
+	client.authType = basicAuth
+	client.username = username
+	client.password = password
+	client.SetBaseURL(endpoint)
+
+	err := client.requestOAuthToken(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (c *Client) requestOAuthToken(ctx context.Context) error {
+	config := &oauth2.Config{
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  fmt.Sprintf("%s://%s/oauth/authorize", c.BaseURL().Scheme, c.BaseURL().Host),
+			TokenURL: fmt.Sprintf("%s://%s/oauth/token", c.BaseURL().Scheme, c.BaseURL().Host),
+		},
+	}
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.client)
+	t, err := config.PasswordCredentialsToken(ctx, c.username, c.password)
+	if err != nil {
+		return err
+	}
+	c.token = t.AccessToken
+	return nil
 }
 
 // NewOAuthClient returns a new GitLab API client. If a nil httpClient is
 // provided, http.DefaultClient will be used. To use API methods which require
 // authentication, provide a valid oauth token.
 func NewOAuthClient(httpClient *http.Client, token string) *Client {
-	return newClient(httpClient, oAuthToken, token)
+	client := newClient(httpClient)
+	client.authType = oAuthToken
+	client.token = token
+	return client
 }
 
-func newClient(httpClient *http.Client, tokenType tokenType, token string) *Client {
+func newClient(httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
 
-	c := &Client{client: httpClient, tokenType: tokenType, token: token, UserAgent: userAgent}
+	c := &Client{client: httpClient, UserAgent: userAgent}
 	if err := c.SetBaseURL(defaultBaseURL); err != nil {
 		// Should never happen since defaultBaseURL is our constant.
 		panic(err)
@@ -357,29 +417,38 @@ func newClient(httpClient *http.Client, tokenType tokenType, token string) *Clie
 	c.Environments = &EnvironmentsService{client: c}
 	c.Events = &EventsService{client: c}
 	c.Features = &FeaturesService{client: c}
+	c.GitIgnoreTemplates = &GitIgnoreTemplatesService{client: c}
 	c.Groups = &GroupsService{client: c}
+	c.GroupIssueBoards = &GroupIssueBoardsService{client: c}
 	c.GroupMembers = &GroupMembersService{client: c}
+	c.GroupMilestones = &GroupMilestonesService{client: c}
+	c.GroupVariables = &GroupVariablesService{client: c}
 	c.Issues = &IssuesService{client: c, timeStats: timeStats}
 	c.IssueLinks = &IssueLinksService{client: c}
 	c.Jobs = &JobsService{client: c}
+	c.Keys = &KeysService{client: c}
 	c.Boards = &IssueBoardsService{client: c}
 	c.Labels = &LabelsService{client: c}
 	c.MergeRequests = &MergeRequestsService{client: c, timeStats: timeStats}
+	c.MergeRequestApprovals = &MergeRequestApprovalsService{client: c}
 	c.Milestones = &MilestonesService{client: c}
 	c.Namespaces = &NamespacesService{client: c}
 	c.Notes = &NotesService{client: c}
 	c.NotificationSettings = &NotificationSettingsService{client: c}
 	c.PagesDomains = &PagesDomainsService{client: c}
 	c.Pipelines = &PipelinesService{client: c}
+	c.PipelineSchedules = &PipelineSchedulesService{client: c}
 	c.PipelineTriggers = &PipelineTriggersService{client: c}
 	c.Projects = &ProjectsService{client: c}
 	c.ProjectMembers = &ProjectMembersService{client: c}
 	c.ProjectSnippets = &ProjectSnippetsService{client: c}
+	c.ProjectVariables = &ProjectVariablesService{client: c}
 	c.ProtectedBranches = &ProtectedBranchesService{client: c}
 	c.Repositories = &RepositoriesService{client: c}
 	c.RepositoryFiles = &RepositoryFilesService{client: c}
 	c.Runners = &RunnersService{client: c}
 	c.Services = &ServicesService{client: c}
+	c.Search = &SearchService{client: c}
 	c.Session = &SessionService{client: c}
 	c.Settings = &SettingsService{client: c}
 	c.Sidekiq = &SidekiqService{client: c}
@@ -409,9 +478,19 @@ func (c *Client) SetBaseURL(urlStr string) error {
 		urlStr += "/"
 	}
 
-	var err error
-	c.baseURL, err = url.Parse(urlStr)
-	return err
+	baseURL, err := url.Parse(urlStr)
+	if err != nil {
+		return err
+	}
+
+	if !strings.HasSuffix(baseURL.Path, apiVersionPath) {
+		baseURL.Path += apiVersionPath
+	}
+
+	// Update the base URL of the client.
+	c.baseURL = baseURL
+
+	return nil
 }
 
 // NewRequest creates an API request. A relative URL path can be provided in
@@ -421,8 +500,14 @@ func (c *Client) SetBaseURL(urlStr string) error {
 // request body.
 func (c *Client) NewRequest(method, path string, opt interface{}, options []OptionFunc) (*http.Request, error) {
 	u := *c.baseURL
-	// Set the encoded opaque data
-	u.Opaque = c.baseURL.Path + path
+	unescaped, err := url.PathUnescape(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the encoded path data
+	u.RawPath = c.baseURL.Path + path
+	u.Path = c.baseURL.Path + unescaped
 
 	if opt != nil {
 		q, err := query.Values(opt)
@@ -467,11 +552,11 @@ func (c *Client) NewRequest(method, path string, opt interface{}, options []Opti
 
 	req.Header.Set("Accept", "application/json")
 
-	switch c.tokenType {
+	switch c.authType {
+	case basicAuth, oAuthToken:
+		req.Header.Set("Authorization", "Bearer "+c.token)
 	case privateToken:
 		req.Header.Set("PRIVATE-TOKEN", c.token)
-	case oAuthToken:
-		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 
 	if c.UserAgent != "" {
@@ -506,25 +591,34 @@ func newResponse(r *http.Response) *Response {
 	return response
 }
 
+const (
+	xTotal      = "X-Total"
+	xTotalPages = "X-Total-Pages"
+	xPerPage    = "X-Per-Page"
+	xPage       = "X-Page"
+	xNextPage   = "X-Next-Page"
+	xPrevPage   = "X-Prev-Page"
+)
+
 // populatePageValues parses the HTTP Link response headers and populates the
 // various pagination link values in the Response.
 func (r *Response) populatePageValues() {
-	if totalItems := r.Response.Header.Get("X-Total"); totalItems != "" {
+	if totalItems := r.Response.Header.Get(xTotal); totalItems != "" {
 		r.TotalItems, _ = strconv.Atoi(totalItems)
 	}
-	if totalPages := r.Response.Header.Get("X-Total-Pages"); totalPages != "" {
+	if totalPages := r.Response.Header.Get(xTotalPages); totalPages != "" {
 		r.TotalPages, _ = strconv.Atoi(totalPages)
 	}
-	if itemsPerPage := r.Response.Header.Get("X-Per-Page"); itemsPerPage != "" {
+	if itemsPerPage := r.Response.Header.Get(xPerPage); itemsPerPage != "" {
 		r.ItemsPerPage, _ = strconv.Atoi(itemsPerPage)
 	}
-	if currentPage := r.Response.Header.Get("X-Page"); currentPage != "" {
+	if currentPage := r.Response.Header.Get(xPage); currentPage != "" {
 		r.CurrentPage, _ = strconv.Atoi(currentPage)
 	}
-	if nextPage := r.Response.Header.Get("X-Next-Page"); nextPage != "" {
+	if nextPage := r.Response.Header.Get(xNextPage); nextPage != "" {
 		r.NextPage, _ = strconv.Atoi(nextPage)
 	}
-	if previousPage := r.Response.Header.Get("X-Prev-Page"); previousPage != "" {
+	if previousPage := r.Response.Header.Get(xPrevPage); previousPage != "" {
 		r.PreviousPage, _ = strconv.Atoi(previousPage)
 	}
 }
@@ -540,6 +634,14 @@ func (c *Client) Do(req *http.Request, v interface{}) (*Response, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized && c.authType == basicAuth {
+		err = c.requestOAuthToken(req.Context())
+		if err != nil {
+			return nil, err
+		}
+		return c.Do(req, v)
+	}
 
 	response := newResponse(resp)
 
@@ -579,12 +681,13 @@ func parseID(id interface{}) (string, error) {
 // GitLab API docs:
 // https://docs.gitlab.com/ce/api/README.html#data-validation-and-error-reporting
 type ErrorResponse struct {
+	Body     []byte
 	Response *http.Response
 	Message  string
 }
 
 func (e *ErrorResponse) Error() string {
-	path, _ := url.QueryUnescape(e.Response.Request.URL.Opaque)
+	path, _ := url.QueryUnescape(e.Response.Request.URL.Path)
 	u := fmt.Sprintf("%s://%s%s", e.Response.Request.URL.Scheme, e.Response.Request.URL.Host, path)
 	return fmt.Sprintf("%s %s: %d %s", e.Response.Request.Method, u, e.Response.StatusCode, e.Message)
 }
@@ -599,12 +702,14 @@ func CheckResponse(r *http.Response) error {
 	errorResponse := &ErrorResponse{Response: r}
 	data, err := ioutil.ReadAll(r.Body)
 	if err == nil && data != nil {
+		errorResponse.Body = data
+
 		var raw interface{}
 		if err := json.Unmarshal(data, &raw); err != nil {
 			errorResponse.Message = "failed to parse unknown error format"
+		} else {
+			errorResponse.Message = parseError(raw)
 		}
-
-		errorResponse.Message = parseError(raw)
 	}
 
 	return errorResponse
@@ -728,18 +833,39 @@ func NotificationLevel(v NotificationLevelValue) *NotificationLevelValue {
 	return p
 }
 
-// OrderBy is a helper routine that allocates a new OrderByValue
-// to store v and returns a pointer to it.
-func OrderBy(v OrderByValue) *OrderByValue {
-	p := new(OrderByValue)
-	*p = v
-	return p
-}
-
 // Visibility is a helper routine that allocates a new VisibilityValue
 // to store v and returns a pointer to it.
 func Visibility(v VisibilityValue) *VisibilityValue {
 	p := new(VisibilityValue)
 	*p = v
 	return p
+}
+
+// MergeMethod is a helper routine that allocates a new MergeMethod
+// to sotre v and returns a pointer to it.
+func MergeMethod(v MergeMethodValue) *MergeMethodValue {
+	p := new(MergeMethodValue)
+	*p = v
+	return p
+}
+
+// BoolValue is a boolean value with advanced json unmarshaling features.
+type BoolValue bool
+
+// UnmarshalJSON allows 1 and 0 to be considered as boolean values
+// Needed for https://gitlab.com/gitlab-org/gitlab-ce/issues/50122
+func (t *BoolValue) UnmarshalJSON(b []byte) error {
+	switch string(b) {
+	case `"1"`:
+		*t = true
+		return nil
+	case `"0"`:
+		*t = false
+		return nil
+	default:
+		var v bool
+		err := json.Unmarshal(b, &v)
+		*t = BoolValue(v)
+		return err
+	}
 }
