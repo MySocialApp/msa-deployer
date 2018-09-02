@@ -21,7 +21,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number of msa-deployer",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("v0.5a")
+		fmt.Println("v0.5")
 	},
 }
 
@@ -66,7 +66,6 @@ func initConfig() {
 
 	configValidator("gitlab_project_id")
 	configValidator("gitlab_token")
-
 }
 
 func configValidator(key string) bool {

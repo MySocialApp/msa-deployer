@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
-	"strings"
-	"io/ioutil"
+	"bufio"
 	log "github.com/sirupsen/logrus"
-	"github.com/xanzy/go-gitlab"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/xanzy/go-gitlab"
+	"os"
 	"strconv"
+	"strings"
 )
 
 var s string
@@ -18,18 +19,21 @@ type Pipelines struct {
 
 // deployCmd represents the deploy command
 var deployCmd = &cobra.Command{
-	Use:   "deploy <client id>",
-	Short: "Deploy client ID applications and infrastructure",
-	Args: cobra.ExactArgs(1),
+	Use:   "deploy <client id> [app name]",
+	Short: "Deploy client ID applications and application (optional)",
+	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		//var pipelineId int
-		log.Info("Deploying " + args[0] + " requested")
+		clientFileName := "clients.csv"
 
-		// Check client exit and establish connection
-		checkClientExist(args[0])
+		// var pipelineId int
+		log.Infof("Deploying %s requested", args[0])
+
+		// Check client/app exist and establish connection
+		checkClientAndAppExist(clientFileName, args)
 		git := gitlabConnection()
+
 		// Make pipeline + get jobs + run desired job
-		pipelineId := gitlabBuildPipeline(git, args[0])
+		pipelineId := gitlabBuildPipeline(git, args)
 		jobs := gitlabGetJob(git, pipelineId)
 		gitlabRunJob(git, pipelineId, jobs, "deploy")
 	},
@@ -39,21 +43,38 @@ func init() {
 	rootCmd.AddCommand(deployCmd)
 }
 
-func checkClientExist(clientId string) {
-	clientFilename := "clients.csv"
+func checkClientAndAppExist(clientFileName string, args []string) {
+	clientFound := 0
+	appFound := 0
+	clientId := args[0]
+	app := ""
 
-	log.Infof("Check %s client exists", clientId)
-
-	// read the whole file at once
-	b, err := ioutil.ReadFile(clientFilename)
-	if err != nil {
-		panic(err)
+	if len(args) == 2 {
+		app = args[1]
 	}
-	s := string(b)
 
-	//check whether s contains substring text
-	if ! strings.Contains(s, clientId) {
-		log.Fatalf("This client has not been found in %s", clientFilename)
+	inFile, _ := os.Open(clientFileName)
+	defer inFile.Close()
+	scanner := bufio.NewScanner(inFile)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		// select clientId line
+		if strings.Contains(scanner.Text(), clientId) {
+			clientFound = 1
+			// select app line
+			if strings.Contains(scanner.Text(), app) {
+				appFound = 1
+				log.Debugf("App %s found for client id %s: %s", app, clientId, scanner.Text())
+			}
+		}
+	}
+
+	if clientFound == 0 {
+		log.Fatalf("Client %s has not been found in %s", clientId, clientFileName)
+	}
+	if app != "" && appFound == 0 {
+		log.Fatalf("Application %s is not set for the client %s in %s", app, clientId, clientFileName)
 	}
 }
 
@@ -65,10 +86,13 @@ func gitlabConnection() *gitlab.Client {
 // gitlabBuildPipeline generate a pipeline from what has been configured in .gitlab-ci.yaml.
 // All jobs for this pipeline will be generated
 // Example: pipeline_id=$(curl -X POST -F "ref=deployer" -F "variables[client_id]=${client_id}" "https://gitlab.com/api/v4/projects/${gitlab_project_id}/trigger/pipeline?token=${gitlab_token}" | jq --raw-input '.id')
-func gitlabBuildPipeline(git *gitlab.Client, clientId string) int {
+func gitlabBuildPipeline(git *gitlab.Client, args []string) int {
 	// Add forms to pipeline trigger
 	customForms := make(map[string]string)
-	customForms["client_id"] = clientId
+	customForms["client_id"] = args[0]
+	if len(args) >= 2 {
+		customForms["app_name"] = args[1]
+	}
 
 	// Generate pipeline trigger
 	opt := &gitlab.RunPipelineTriggerOptions{
