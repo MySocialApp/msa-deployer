@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/xanzy/go-gitlab"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -29,13 +30,16 @@ var deployCmd = &cobra.Command{
 		log.Infof("Deploying %s requested", args[0])
 
 		// Check client/app exist and establish connection
-		checkClientAndAppExist(clientFileName, args)
+		deployClients := checkClientAndAppExist(clientFileName, args)
 		git := gitlabConnection()
 
 		// Make pipeline + get jobs + run desired job
-		pipelineId := gitlabBuildPipeline(git, args)
-		jobs := gitlabGetJob(git, pipelineId)
-		gitlabRunJob(git, pipelineId, jobs, "deploy")
+		for _, clientName := range deployClients {
+			args[0] = clientName
+			pipelineId := gitlabBuildPipeline(git, args)
+			jobs := gitlabGetJob(git, pipelineId)
+			gitlabRunJob(git, pipelineId, jobs, "deploy", args)
+		}
 	},
 }
 
@@ -43,16 +47,16 @@ func init() {
 	rootCmd.AddCommand(deployCmd)
 }
 
-func checkClientAndAppExist(clientFileName string, args []string) {
+func checkClientAndAppExist(clientFileName string, args []string) []string {
+	var clients []string
 	clientFound := 0
-	appFound := 0
 	clientId := args[0]
 	app := ""
-
 	if len(args) == 2 {
 		app = args[1]
 	}
 
+	// read csv line by line
 	inFile, _ := os.Open(clientFileName)
 	defer inFile.Close()
 	scanner := bufio.NewScanner(inFile)
@@ -60,11 +64,14 @@ func checkClientAndAppExist(clientFileName string, args []string) {
 
 	for scanner.Scan() {
 		// select clientId line
-		if strings.Contains(scanner.Text(), clientId) {
+		if strings.Contains(scanner.Text(), clientId) || clientId == "all" {
 			clientFound = 1
 			// select app line
 			if strings.Contains(scanner.Text(), app) {
-				appFound = 1
+				csvLine := strings.Split(scanner.Text(), ",")
+				if match, _ := regexp.MatchString("^#", csvLine[0]) ; ! match {
+					clients = append(clients, csvLine[0])
+				}
 				log.Debugf("App %s found for client id %s: %s", app, clientId, scanner.Text())
 			}
 		}
@@ -73,9 +80,15 @@ func checkClientAndAppExist(clientFileName string, args []string) {
 	if clientFound == 0 {
 		log.Fatalf("Client %s has not been found in %s", clientId, clientFileName)
 	}
-	if app != "" && appFound == 0 {
-		log.Fatalf("Application %s is not set for the client %s in %s", app, clientId, clientFileName)
+	if app != "" && len(clients) == 0 {
+		if clientId == "all" {
+			log.Fatal("No application has been found")
+		} else {
+			log.Fatalf("Application %s is not set for the client %s in %s", app, clientId, clientFileName)
+		}
 	}
+
+	return clients
 }
 
 // gitlabConnection establish a gitlab connection
@@ -126,7 +139,7 @@ func gitlabGetJob(git *gitlab.Client, pipelineId int) []*gitlab.Job {
 
 // gitlabRunJob plays a job from a job name
 // Example: curl -X POST --header "PRIVATE-TOKEN: ${gitlab_token}" -F ref=deployer "https://gitlab.com/api/v4/projects/${gitlab_project_id}/jobs/${job_id}/play"
-func gitlabRunJob(git *gitlab.Client, pipelineId int, jobs []*gitlab.Job, jobName string) {
+func gitlabRunJob(git *gitlab.Client, pipelineId int, jobs []*gitlab.Job, jobName string, args []string) {
 	var jobId int
 
 	// Get pipeline ID and job ID
@@ -145,6 +158,6 @@ func gitlabRunJob(git *gitlab.Client, pipelineId int, jobs []*gitlab.Job, jobNam
 	if err != nil {
 		log.Fatalf("Wasn't able to play job %s id %s on pipeline %s: %s", jobName, strconv.Itoa(jobId), strconv.Itoa(pipelineId), err)
 	}
-	log.Info("Job successfully been launched")
+	log.Infof("Job successfully been launched (%s/%s)", args[0], args[1])
 	log.Infof("Job progression: https://gitlab.com/%s/-/jobs/%s", viper.GetString("gitlab_project_name"), strconv.Itoa(jobId))
 }
