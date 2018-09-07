@@ -20,7 +20,7 @@ type Pipelines struct {
 
 // deployCmd represents the deploy command
 var deployCmd = &cobra.Command{
-	Use:   "deploy <client id> [app name]",
+	Use:   "deploy <client id|all> [app name]",
 	Short: "Deploy client ID applications and application (optional)",
 	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -158,6 +158,10 @@ func gitlabRunJob(git *gitlab.Client, pipelineId int, jobs []*gitlab.Job, jobNam
 	if err != nil {
 		log.Fatalf("Wasn't able to play job %s id %s on pipeline %s: %s", jobName, strconv.Itoa(jobId), strconv.Itoa(pipelineId), err)
 	}
-	log.Infof("Job successfully been launched (%s/%s)", args[0], args[1])
+	if len(args) == 2 {
+		log.Infof("Job successfully been launched (%s/%s)", args[0], args[1])
+	} else {
+		log.Infof("Job successfully been launched (%s)", args[0])
+	}
 	log.Infof("Job progression: https://gitlab.com/%s/-/jobs/%s", viper.GetString("gitlab_project_name"), strconv.Itoa(jobId))
 }
