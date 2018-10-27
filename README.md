@@ -46,3 +46,13 @@ Simply run this to get all available options:
 ```
 ./msa-deployer --help
 ```
+
+To deploy, look at:
+```
+./msa-deployer deploy --help
+```
+
+If you want to deploy an app for all clients:
+```
+./msa-deployer deploy all <your_app_name>
+```
